@@ -8,19 +8,9 @@ package org.sonatype.aether.connector.async;
  *   http://www.eclipse.org/legal/epl-v10.html
  *******************************************************************************/
 
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.AsyncHttpClientConfig;
-import com.ning.http.client.AsyncHttpProvider;
-import com.ning.http.client.FluentCaseInsensitiveStringsMap;
-import com.ning.http.client.HttpResponseBodyPart;
-import com.ning.http.client.HttpResponseHeaders;
-import com.ning.http.client.ProxyServer;
-import com.ning.http.client.ProxyServer.Protocol;
-import com.ning.http.client.Realm;
-import com.ning.http.client.Request;
-import com.ning.http.client.RequestBuilder;
-import com.ning.http.client.Response;
-import com.ning.http.client.providers.netty.NettyAsyncHttpProvider;
+import org.asynchttpclient.*;
+import org.asynchttpclient.proxy.ProxyServer;
+import org.asynchttpclient.proxy.ProxyType;
 import org.sonatype.aether.ConfigurationProperties;
 import org.sonatype.aether.RepositoryCache;
 import org.sonatype.aether.RepositorySystemSession;
@@ -70,12 +60,8 @@ import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.nio.charset.Charset;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -117,7 +103,9 @@ class AsyncRepositoryConnector
 
     private final int maxIOExceptionRetry;
 
-    private final FluentCaseInsensitiveStringsMap headers;
+    private final Map<String, String> headers;
+
+    private AsyncHttpClientConfig asyncHttpClientConfig;
 
     /**
      * Create an {@link org.sonatype.aether.connector.async.AsyncRepositoryConnector} instance which connect to the
@@ -149,9 +137,7 @@ class AsyncRepositoryConnector
             throw new NoRepositoryConnectorException( repository );
         }
 
-        AsyncHttpClientConfig config = createConfig( session, repository, true );
-
-        httpClient = new AsyncHttpClient( getProvider( session, config ), config );
+        asyncHttpClientConfig = createConfig( session, repository, true );
 
         checksumAlgos = new LinkedHashMap<String, String>();
         checksumAlgos.put( "SHA-1", ".sha1" );
@@ -160,7 +146,7 @@ class AsyncRepositoryConnector
         disableResumeSupport = ConfigUtils.getBoolean( session, false, "aether.connector.ahc.disableResumable" );
         maxIOExceptionRetry = ConfigUtils.getInteger( session, 3, "aether.connector.ahc.resumeRetry" );
 
-        this.headers = new FluentCaseInsensitiveStringsMap();
+        this.headers = new HashMap<>();
         Map<?, ?> headers =
             ConfigUtils.getMap( session, null, ConfigurationProperties.HTTP_HEADERS + "." + repository.getId(),
                                 ConfigurationProperties.HTTP_HEADERS );
@@ -170,81 +156,12 @@ class AsyncRepositoryConnector
             {
                 if ( entry.getKey() instanceof String && entry.getValue() instanceof String )
                 {
-                    this.headers.add( entry.getKey().toString(), entry.getValue().toString() );
+                    this.headers.put( entry.getKey().toString(), entry.getValue().toString() );
                 }
             }
         }
     }
 
-    private AsyncHttpProvider getProvider( RepositorySystemSession session, AsyncHttpClientConfig config )
-    {
-        String className = ConfigUtils.getString( session, "", "aether.connector.ahc.provider" );
-
-        if ( className != null && className.length() > 0 )
-        {
-            if ( "netty".equals( className ) )
-            {
-                className = "com.ning.http.client.providers.netty.NettyAsyncHttpProvider";
-            }
-            else if ( "jdk".equals( className ) )
-            {
-                className = "com.ning.http.client.providers.jdk.JDKAsyncHttpProvider";
-            }
-            else if ( "apache".equals( className ) )
-            {
-                className = "com.ning.http.client.providers.apache.ApacheAsyncHttpProvider";
-            }
-
-            RepositoryCache cache = session.getCache();
-
-            try
-            {
-                if ( cache == null || cache.get( session, className ) == null )
-                {
-                    logger.debug( "Using AHC provider " + className );
-
-                    Class<?> providerClass = getClass().getClassLoader().loadClass( className );
-
-                    Object inst = providerClass.getConstructor( AsyncHttpClientConfig.class ).newInstance( config );
-
-                    return (AsyncHttpProvider) inst;
-                }
-            }
-            catch ( LinkageError e )
-            {
-                warn( "Could not load AHC provider " + className + ", falling back to default", e );
-            }
-            catch ( ClassNotFoundException e )
-            {
-                logger.warn( "Could not load AHC provider " + className + ", falling back to default" );
-            }
-            catch ( ClassCastException e )
-            {
-                logger.warn( "Could not load type-compatible AHC provider " + className + ", falling back to default" );
-            }
-            catch ( Exception e )
-            {
-                Throwable cause = e;
-                if ( e instanceof InvocationTargetException && e.getCause() != null )
-                {
-                    cause = e.getCause();
-                }
-                warn( "Could not instantiate AHC provider " + className + ", falling back to default", cause );
-            }
-
-            if ( cache != null )
-            {
-                cache.put( session, className, Boolean.TRUE );
-            }
-        }
-
-        return getDefaultProvider( config );
-    }
-
-    private AsyncHttpProvider getDefaultProvider( AsyncHttpClientConfig config )
-    {
-        return new NettyAsyncHttpProvider( config );
-    }
 
     private void warn( String message, Throwable cause )
     {
@@ -263,41 +180,41 @@ class AsyncRepositoryConnector
         }
     }
 
-    private Realm getRealm( RemoteRepository repository, String credentialEncoding )
+    private Realm getRealm(RemoteRepository repository, String credentialEncoding )
     {
         Realm realm = null;
-
         Authentication a = repository.getAuthentication();
         if ( a != null && a.getUsername() != null )
         {
-            realm = new Realm.RealmBuilder().setPrincipal( a.getUsername() ).setPassword(
-                a.getPassword() ).setUsePreemptiveAuth( false ).setEnconding( credentialEncoding ).build();
+
+            realm = new Realm.Builder(a.getUsername(), a.getPassword())
+                    .setCharset(Charset.forName(credentialEncoding)).setUsePreemptiveAuth(false).build();
+
         }
 
         return realm;
     }
 
-    private ProxyServer getProxy( RemoteRepository repository, String credentialEncoding )
+    private ProxyServer getProxy(RemoteRepository repository, String credentialEncoding)
     {
         ProxyServer proxyServer = null;
-
         Proxy p = repository.getProxy();
         if ( p != null )
         {
+
+            ProxyServer.Builder proxyBuilder = new ProxyServer.Builder(p.getHost(), p.getPort());
             Authentication a = p.getAuthentication();
             boolean useSSL = repository.getProtocol().equalsIgnoreCase( "https" ) ||
                 repository.getProtocol().equalsIgnoreCase( "dav:https" );
-            if ( a == null )
+            proxyBuilder.setProxyType(ProxyType.HTTP);
+
+            if ( a != null && useSSL)
             {
-                proxyServer = new ProxyServer( useSSL ? Protocol.HTTPS : Protocol.HTTP, p.getHost(), p.getPort() );
+
+                proxyBuilder.setSecuredPort(p.getPort());
+                proxyBuilder.setRealm(getRealm(repository, credentialEncoding));
             }
-            else
-            {
-                proxyServer =
-                    new ProxyServer( useSSL ? Protocol.HTTPS : Protocol.HTTP, p.getHost(), p.getPort(), a.getUsername(),
-                                     a.getPassword() );
-                proxyServer.setEncoding( credentialEncoding );
-            }
+            proxyServer = proxyBuilder.build();
         }
 
         return proxyServer;
@@ -312,13 +229,14 @@ class AsyncRepositoryConnector
     private AsyncHttpClientConfig createConfig( RepositorySystemSession session, RemoteRepository repository,
                                                 boolean useCompression )
     {
-        AsyncHttpClientConfig.Builder configBuilder = new AsyncHttpClientConfig.Builder();
+        DefaultAsyncHttpClientConfig.Builder configBuilder = Dsl.config();
+
 
         String userAgent =
             ConfigUtils.getString( session, ConfigurationProperties.DEFAULT_USER_AGENT, ConfigurationProperties.USER_AGENT );
         if ( !StringUtils.isEmpty( userAgent ) )
         {
-            configBuilder.setUserAgent( userAgent );
+            configBuilder.setUserAgent(userAgent);
         }
         int connectTimeout =
             ConfigUtils.getInteger( session, ConfigurationProperties.DEFAULT_CONNECT_TIMEOUT,
@@ -327,16 +245,15 @@ class AsyncRepositoryConnector
             ConfigUtils.getString( session, ConfigurationProperties.DEFAULT_HTTP_CREDENTIAL_ENCODING,
                                    ConfigurationProperties.HTTP_CREDENTIAL_ENCODING + "." + repository.getId(),
                                    ConfigurationProperties.HTTP_CREDENTIAL_ENCODING );
+        configBuilder.setConnectTimeout(connectTimeout);
+        configBuilder.setCompressionEnforced(useCompression);
+        configBuilder.setFollowRedirect(true);
+        configBuilder.setMaxRequestRetry(0);
+        configBuilder.setRequestTimeout(ConfigUtils.getInteger(session, ConfigurationProperties.DEFAULT_REQUEST_TIMEOUT,
+                ConfigurationProperties.REQUEST_TIMEOUT ));
 
-        configBuilder.setConnectionTimeoutInMs( connectTimeout );
-        configBuilder.setCompressionEnabled( useCompression );
-        configBuilder.setFollowRedirects( true );
-        configBuilder.setMaxRequestRetry( 0 );
-        configBuilder.setRequestTimeoutInMs( ConfigUtils.getInteger( session, ConfigurationProperties.DEFAULT_REQUEST_TIMEOUT,
-                                                              ConfigurationProperties.REQUEST_TIMEOUT ) );
-
-        configBuilder.setProxyServer( getProxy( repository, credentialEncoding ) );
-        configBuilder.setRealm( getRealm( repository, credentialEncoding ) );
+        configBuilder.setProxyServer(getProxy(repository, credentialEncoding ));
+        configBuilder.setRealm(getRealm( repository, credentialEncoding ));
 
         return configBuilder.build();
     }
@@ -1167,8 +1084,10 @@ class AsyncRepositoryConnector
                 }
                 transferResource.setContentLength( file.length() );
 
-                httpClient.preparePut( uri ).setHeaders( headers ).setBody(
+                Object obj = httpClient.preparePut( uri ).setHeaders( headers ).setBody(
                     new ProgressingFileBodyGenerator( file, completionHandler ) ).execute( completionHandler );
+
+                System.out.println("iqo");
             }
             catch ( Exception e )
             {

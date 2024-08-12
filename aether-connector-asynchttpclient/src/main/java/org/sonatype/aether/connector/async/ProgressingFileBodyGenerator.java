@@ -83,7 +83,7 @@ class ProgressingFileBodyGenerator
             {
                 channel = dst = new ProgressingWritableByteChannel( target );
             }
-            return delegate.transferTo( position, Math.min( count, 1024 * 16 ), dst );
+            return delegate.transferTo( position, dst );
         }
 
         public void close()
@@ -92,6 +92,10 @@ class ProgressingFileBodyGenerator
             delegate.close();
         }
 
+        @Override
+        public long transferTo(long l, WritableByteChannel writableByteChannel) throws IOException {
+            return 0;
+        }
     }
 
     final class ProgressingWritableByteChannel

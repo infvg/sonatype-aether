@@ -13,7 +13,11 @@ import static org.junit.Assert.*;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.concurrent.Future;
 
+import com.ning.http.client.AsyncHttpClient;
+import com.ning.http.client.AsyncHttpClientConfig;
+import com.ning.http.client.Response;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.sonatype.aether.artifact.Artifact;
@@ -32,6 +36,7 @@ import org.sonatype.tests.http.runner.junit.ConfigurationRunner;
 public class GetTest
     extends AsyncConnectorSuiteConfiguration
 {
+
 
     @Test
     public void testDownloadArtifact()

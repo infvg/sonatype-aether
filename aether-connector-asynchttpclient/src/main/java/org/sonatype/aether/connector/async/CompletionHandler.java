@@ -8,13 +8,9 @@ package org.sonatype.aether.connector.async;
  *   http://www.eclipse.org/legal/epl-v10.html
  *******************************************************************************/
 
-import com.ning.http.client.AsyncHandler;
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.HttpResponseBodyPart;
-import com.ning.http.client.HttpResponseHeaders;
-import com.ning.http.client.HttpResponseStatus;
-import com.ning.http.client.ProgressAsyncHandler;
-import com.ning.http.client.Response;
+
+import org.asynchttpclient.AsyncCompletionHandler;
+import org.asynchttpclient.Response;
 import org.sonatype.aether.spi.log.Logger;
 import org.sonatype.aether.transfer.TransferCancelledException;
 import org.sonatype.aether.transfer.TransferEvent;
@@ -32,22 +28,15 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * An {@link AsyncHandler} for handling asynchronous download an upload.
+ * An {@link AsyncCompletionHandler} for handling asynchronous download an upload.
  *
  * @author Jeanfrancois Arcand
  */
-class CompletionHandler
-    implements ProgressAsyncHandler<Response>
-{
+class CompletionHandler extends AsyncCompletionHandler<Void> {
     private final Logger logger;
-
-    private HttpResponseStatus status;
-
-    private HttpResponseHeaders headers;
 
     private final ConcurrentLinkedQueue<TransferListener> listeners = new ConcurrentLinkedQueue<TransferListener>();
 
-    private final AsyncHttpClient httpClient;
 
     private final AtomicLong byteTransfered = new AtomicLong();
 
@@ -57,10 +46,9 @@ class CompletionHandler
 
     private final TransferEvent.RequestType requestType;
 
-    public CompletionHandler( DefaultTransferResource transferResource, AsyncHttpClient httpClient, Logger logger,
+    public CompletionHandler( DefaultTransferResource transferResource, Logger logger,
                               TransferEvent.RequestType requestType )
     {
-        this.httpClient = httpClient;
         this.transferResource = transferResource;
         this.logger = logger;
         this.requestType = requestType;
@@ -177,8 +165,7 @@ class CompletionHandler
         {
             throw new TransferException( "Invalid AHC State. Response will possibly gets corrupted." );
         }
-        return onCompleted( httpClient.getProvider().prepareResponse( status, headers,
-                                                                      Collections.<HttpResponseBodyPart> emptyList() ) );
+        return null;
     }
 
     /**
@@ -189,22 +176,18 @@ class CompletionHandler
     {
         exception.set( t );
     }
-
     /**
      * Invoked once the HTTP response has been fully read.
      *
-     * @param response The {@link com.ning.http.client.Response}
+     * @param response The {@link Response}
      * @return Type of the value that will be returned by the associated {@link java.util.concurrent.Future}
      */
-    public Response onCompleted( Response response )
-        throws Exception
-    {
-        if ( response != null && response.hasResponseStatus() && response.getStatusCode() >= HttpURLConnection.HTTP_OK
-            && response.getStatusCode() <= HttpURLConnection.HTTP_CREATED )
-        {
-            fireTransferSucceeded( response );
-        }
-        return response;
+    @Override
+    public Void onCompleted(Response response) throws Exception {
+        if (response != null && response.hasResponseStatus() && response.getStatusCode() >= HttpURLConnection.HTTP_OK
+            && response.getStatusCode() <= HttpURLConnection.HTTP_CREATED)
+            fireTransferSucceeded(response);
+        return null;
     }
 
     void fireTransferProgressed( final byte[] buffer )
@@ -253,6 +236,7 @@ class CompletionHandler
     void fireTransferSucceeded( final Response response )
         throws IOException
     {
+        response.getResponseBodyAsBytes();
         final long bytesTransferred = byteTransfered.get();
 
         final TransferEvent transferEvent = new AsyncTransferEvent()
