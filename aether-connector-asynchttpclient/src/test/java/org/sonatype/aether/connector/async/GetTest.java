@@ -15,9 +15,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.concurrent.Future;
 
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.AsyncHttpClientConfig;
-import com.ning.http.client.Response;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.sonatype.aether.artifact.Artifact;

@@ -8,11 +8,13 @@ package org.sonatype.aether.connector.async;
  *   http://www.eclipse.org/legal/epl-v10.html
  *******************************************************************************/
 
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.HttpHeaders;
 import org.asynchttpclient.*;
 import org.asynchttpclient.proxy.ProxyServer;
 import org.asynchttpclient.proxy.ProxyType;
+import org.asynchttpclient.request.body.generator.FileBodyGenerator;
 import org.sonatype.aether.ConfigurationProperties;
-import org.sonatype.aether.RepositoryCache;
 import org.sonatype.aether.RepositorySystemSession;
 import org.sonatype.aether.repository.Authentication;
 import org.sonatype.aether.repository.Proxy;
@@ -55,16 +57,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
-import java.lang.reflect.InvocationTargetException;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.Charset;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -103,7 +102,7 @@ class AsyncRepositoryConnector
 
     private final int maxIOExceptionRetry;
 
-    private final Map<String, String> headers;
+    private final HttpHeaders headers;
 
     private AsyncHttpClientConfig asyncHttpClientConfig;
 
@@ -145,8 +144,8 @@ class AsyncRepositoryConnector
 
         disableResumeSupport = ConfigUtils.getBoolean( session, false, "aether.connector.ahc.disableResumable" );
         maxIOExceptionRetry = ConfigUtils.getInteger( session, 3, "aether.connector.ahc.resumeRetry" );
-
-        this.headers = new HashMap<>();
+        this.httpClient = new DefaultAsyncHttpClient(asyncHttpClientConfig);
+        this.headers = new DefaultHttpHeaders();
         Map<?, ?> headers =
             ConfigUtils.getMap( session, null, ConfigurationProperties.HTTP_HEADERS + "." + repository.getId(),
                                 ConfigurationProperties.HTTP_HEADERS );
@@ -156,7 +155,7 @@ class AsyncRepositoryConnector
             {
                 if ( entry.getKey() instanceof String && entry.getValue() instanceof String )
                 {
-                    this.headers.put( entry.getKey().toString(), entry.getValue().toString() );
+                    this.headers.add( entry.getKey().toString(), entry.getValue().toString() );
                 }
             }
         }
@@ -454,6 +453,7 @@ class AsyncRepositoryConnector
 
         public void run()
         {
+
             download.setState( Transfer.State.ACTIVE );
             final String uri = validateUri( path );
             final DefaultTransferResource transferResource =
@@ -482,13 +482,14 @@ class AsyncRepositoryConnector
                     length = resumableFile.length();
                 }
 
-                FluentCaseInsensitiveStringsMap headers = new FluentCaseInsensitiveStringsMap();
+                HttpHeaders headers = new DefaultHttpHeaders();
+
                 if ( !useCache )
                 {
                     headers.add( "Pragma", "no-cache" );
                 }
                 headers.add( "Accept", "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2" );
-                headers.replaceAll( AsyncRepositoryConnector.this.headers );
+                headers.add( AsyncRepositoryConnector.this.headers );
 
                 Request request = null;
                 final AtomicInteger maxRequestTry = new AtomicInteger();
@@ -504,7 +505,7 @@ class AsyncRepositoryConnector
                 if ( length > 0 )
                 {
                     AsyncHttpClientConfig config = createConfig( session, repository, false );
-                    client = new AsyncHttpClient( new NettyAsyncHttpProvider( config ) );
+                    client = new DefaultAsyncHttpClient( config);
                     request = client.prepareGet( uri ).setRangeOffset( length ).setHeaders( headers ).build();
                     closeOnComplete.set( true );
                 }
@@ -515,7 +516,7 @@ class AsyncRepositoryConnector
 
                 final Request activeRequest = request;
                 final AsyncHttpClient activeHttpClient = client;
-                completionHandler = new CompletionHandler( transferResource, httpClient, logger, RequestType.GET )
+                completionHandler = new CompletionHandler( transferResource, logger, RequestType.GET )
                 {
                     private final AtomicBoolean handleTmpFile = new AtomicBoolean( true );
 
@@ -525,11 +526,10 @@ class AsyncRepositoryConnector
                      * {@inheritDoc}
                      */
                     @Override
-                    public STATE onHeadersReceived( final HttpResponseHeaders headers )
+                    public State onHeadersReceived( final HttpHeaders headers )
                         throws Exception
                     {
-                        FluentCaseInsensitiveStringsMap h = headers.getHeaders();
-                        String rangeByteValue = h.getFirstValue( "Content-Range" );
+                        String rangeByteValue = headers.get( "Content-Range" );
                         // Make sure the server acceptance of the range requests headers
                         if ( rangeByteValue != null && rangeByteValue.compareToIgnoreCase( "none" ) != 0 )
                         {
@@ -549,17 +549,13 @@ class AsyncRepositoryConnector
                         try
                         {
                             logger.debug("onThrowable", t);
-
-                            /**
-                             * If an IOException occurs, let's try to resume the request based on how much bytes has
-                             * been so far downloaded. Fail after IOException.
-                             */
                             try
                             {
                                 if ( !disableResumeSupport && !localException.get()
                                     && maxRequestTry.get() < maxIOExceptionRetry && isResumeWorthy( t ) )
                                 {
                                     logger.debug( "Trying to recover from an IOException " + activeRequest );
+
                                     maxRequestTry.incrementAndGet();
                                     Request newRequest =
                                         new RequestBuilder( activeRequest ).setRangeOffset( resumableFile.length() ).build();
@@ -625,7 +621,7 @@ class AsyncRepositoryConnector
                         removeTransferListener( listener );
                     }
 
-                    public STATE onBodyPartReceived( final HttpResponseBodyPart content )
+                    public State onBodyPartReceived( final HttpResponseBodyPart content )
                         throws Exception
                     {
                         if ( status() != null &&
@@ -648,7 +644,7 @@ class AsyncRepositoryConnector
                     }
 
                     @Override
-                    public Response onCompleted( Response r )
+                    public Response onCompleted(Response r )
                         throws Exception
                     {
                         try
@@ -668,71 +664,62 @@ class AsyncRepositoryConnector
 
                             if ( !ignoreChecksum )
                             {
-                                activeHttpClient.getConfig().executorService().execute( new Runnable()
-                                {
-                                    public void run()
-                                    {
-                                        try
-                                        {
-                                            try
-                                            {
+                                ExecutorService executorService = null;
+                                try {
+                                    executorService = Executors.newSingleThreadExecutor();
+
+                                    executorService.execute(() -> {
+                                        try {
+                                            try {
                                                 Map<String, Object> checksums =
-                                                    ChecksumUtils.calc( fileLockCompanion.getFile(),
-                                                                        checksumAlgos.keySet() );
-                                                if ( !verifyChecksum( file, uri, (String) checksums.get( "SHA-1" ),
-                                                                      ".sha1" ) &&
-                                                    !verifyChecksum( file, uri, (String) checksums.get( "MD5" ),
-                                                                     ".md5" ) )
-                                                {
-                                                    throw new ChecksumFailureException( "Checksum validation failed" +
-                                                                                            ", no checksums available from the repository" );
+                                                        ChecksumUtils.calc(fileLockCompanion.getFile(),
+                                                                checksumAlgos.keySet());
+                                                if (!verifyChecksum(file, uri, (String) checksums.get("SHA-1"),
+                                                        ".sha1") &&
+                                                        !verifyChecksum(file, uri, (String) checksums.get("MD5"),
+                                                                ".md5")) {
+                                                    throw new ChecksumFailureException("Checksum validation failed" +
+                                                            ", no checksums available from the repository");
                                                 }
-                                            }
-                                            catch ( ChecksumFailureException e )
-                                            {
-                                                if ( RepositoryPolicy.CHECKSUM_POLICY_FAIL.equals( checksumPolicy ) )
-                                                {
+                                            } catch (ChecksumFailureException e) {
+                                                if (RepositoryPolicy.CHECKSUM_POLICY_FAIL.equals(checksumPolicy)) {
                                                     throw e;
                                                 }
-                                                if ( listener != null )
-                                                {
+                                                if (listener != null) {
                                                     listener.transferCorrupted(
-                                                        newEvent( transferResource, e, RequestType.GET,
-                                                                  EventType.CORRUPTED ) );
+                                                            newEvent(transferResource, e, RequestType.GET,
+                                                                    EventType.CORRUPTED));
                                                 }
                                             }
-                                        }
-                                        catch ( Exception ex )
-                                        {
+                                        } catch (Exception ex) {
                                             exception = ex;
-                                        }
-                                        finally
-                                        {
-                                            if ( exception == null )
-                                            {
-                                                try
-                                                {
-                                                    rename( fileLockCompanion.getFile(), file );
-                                                    releaseLock( fileLockCompanion );
-                                                }
-                                                catch ( IOException e )
-                                                {
+                                        } finally {
+                                            if (exception == null) {
+                                                try {
+                                                    rename(fileLockCompanion.getFile(), file);
+                                                    releaseLock(fileLockCompanion);
+                                                } catch (IOException e) {
                                                     exception = e;
                                                 }
-                                            }
-                                            else
-                                            {
-                                                deleteFile( fileLockCompanion );
+                                            } else {
+                                                deleteFile(fileLockCompanion);
                                             }
 
                                             latch.countDown();
-                                            if ( closeOnComplete.get() )
-                                            {
-                                                activeHttpClient.close();
+                                            if (closeOnComplete.get()) {
+                                                try {
+                                                    activeHttpClient.close();
+                                                } catch (IOException e) {
+                                                    throw new RuntimeException(e);
+                                                }
                                             }
                                         }
-                                    }
-                                } );
+                                    });
+                                } catch (Exception e){
+                                    throw e;
+                                } finally {
+                                    executorService.shutdown();
+                                }
                             }
                             else
                             {
@@ -1001,7 +988,7 @@ class AsyncRepositoryConnector
                 final String uri = validateUri( path );
 
                 final CompletionHandler completionHandler =
-                    new CompletionHandler( transferResource, httpClient, logger, RequestType.PUT )
+                    new CompletionHandler( transferResource, logger, RequestType.PUT )
                     {
                         @Override
                         public void onThrowable( Throwable t )
@@ -1031,15 +1018,15 @@ class AsyncRepositoryConnector
                         }
 
                         @Override
-                        public Response onCompleted( Response r )
+                        public Response onCompleted(Response r )
                             throws Exception
                         {
                             try
                             {
                                 Response response = super.onCompleted( r );
                                 handleResponseCode( uri, response.getStatusCode(), response.getStatusText() );
-
-                                httpClient.getConfig().executorService().execute( new Runnable()
+                                ExecutorService executorService = Executors.newSingleThreadExecutor();
+                                executorService.execute( new Runnable()
                                 {
                                     public void run()
                                     {
@@ -1084,8 +1071,8 @@ class AsyncRepositoryConnector
                 }
                 transferResource.setContentLength( file.length() );
 
-                Object obj = httpClient.preparePut( uri ).setHeaders( headers ).setBody(
-                    new ProgressingFileBodyGenerator( file, completionHandler ) ).execute( completionHandler );
+                FileBodyGenerator gen = new FileBodyGenerator(file);
+                Object obj = httpClient.preparePut( uri ).setHeaders( headers ).setBody(gen).execute( completionHandler );
 
                 System.out.println("iqo");
             }
@@ -1229,11 +1216,16 @@ class AsyncRepositoryConnector
         void wrap( T transfer, Exception e, RemoteRepository repository );
     }
 
-    public void close()
-    {
-        closed.set( true );
-        httpClient.close();
-    }
+    public void close() {
+            closed.set(true);
+
+        try {
+            httpClient.close();
+        }catch(Exception e){
+            logger.debug( "Failed to close httpClient: " + e.getMessage(), e );
+        }
+
+        }
 
     private <T> Collection<T> safe( Collection<T> items )
     {
@@ -1258,17 +1250,14 @@ class AsyncRepositoryConnector
             File parentFile = f.getParentFile();
             if ( parentFile.isDirectory() )
             {
-                for ( File tmpFile : parentFile.listFiles( new FilenameFilter()
-                {
-                    public boolean accept( File dir, String name )
-                    {
-                        if ( name.indexOf( "." ) > 0 && name.lastIndexOf( "." ) == name.indexOf( ".ahc" ) )
-                        {
+                for ( File tmpFile : Objects.requireNonNull(parentFile.listFiles(new FilenameFilter() {
+                    public boolean accept(File dir, String name) {
+                        if (name.indexOf(".") > 0 && name.lastIndexOf(".") == name.indexOf(".ahc")) {
                             return true;
                         }
                         return false;
                     }
-                } ) )
+                })))
                 {
 
                     if ( tmpFile.length() > 0 )

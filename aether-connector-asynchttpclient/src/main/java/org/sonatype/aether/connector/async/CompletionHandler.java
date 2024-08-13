@@ -9,8 +9,8 @@ package org.sonatype.aether.connector.async;
  *******************************************************************************/
 
 
-import org.asynchttpclient.AsyncCompletionHandler;
-import org.asynchttpclient.Response;
+import io.netty.handler.codec.http.HttpHeaders;
+import org.asynchttpclient.*;
 import org.sonatype.aether.spi.log.Logger;
 import org.sonatype.aether.transfer.TransferCancelledException;
 import org.sonatype.aether.transfer.TransferEvent;
@@ -21,7 +21,6 @@ import org.sonatype.aether.util.listener.DefaultTransferResource;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.nio.ByteBuffer;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author Jeanfrancois Arcand
  */
-class CompletionHandler extends AsyncCompletionHandler<Void> {
+class CompletionHandler extends AsyncCompletionHandler<Response> {
     private final Logger logger;
 
     private final ConcurrentLinkedQueue<TransferListener> listeners = new ConcurrentLinkedQueue<TransferListener>();
@@ -40,11 +39,15 @@ class CompletionHandler extends AsyncCompletionHandler<Void> {
 
     private final AtomicLong byteTransfered = new AtomicLong();
 
+    private HttpResponseStatus status;
+
+
     private final AtomicReference<Throwable> exception = new AtomicReference<Throwable>();
 
     private final DefaultTransferResource transferResource;
 
     private final TransferEvent.RequestType requestType;
+    private final Response.ResponseBuilder builder = new Response.ResponseBuilder();
 
     public CompletionHandler( DefaultTransferResource transferResource, Logger logger,
                               TransferEvent.RequestType requestType )
@@ -54,7 +57,8 @@ class CompletionHandler extends AsyncCompletionHandler<Void> {
         this.requestType = requestType;
     }
 
-    public STATE onHeaderWriteCompleted()
+    @Override
+    public State onHeadersWritten()
     {
         if ( TransferEvent.RequestType.PUT.equals( requestType ) )
         {
@@ -65,36 +69,27 @@ class CompletionHandler extends AsyncCompletionHandler<Void> {
             }
             catch ( TransferCancelledException e )
             {
-                return STATE.ABORT;
+                return State.ABORT;
             }
         }
-        return STATE.CONTINUE;
-    }
-
-    public STATE onContentWriteCompleted()
-    {
-        return STATE.CONTINUE;
-    }
-
-    public STATE onContentWriteProgress( long amount, long current, long total )
-    {
-        return STATE.CONTINUE;
+        return State.CONTINUE;
     }
 
     /**
      * {@inheritDoc}
      */
-    /* @Override */
-    public STATE onBodyPartReceived( final HttpResponseBodyPart content )
+    @Override
+    public State onBodyPartReceived( final HttpResponseBodyPart content )
         throws Exception
     {
         try
         {
             fireTransferProgressed( content.getBodyPartBytes() );
+            this.builder.accumulate(content);
         }
         catch ( TransferCancelledException e )
         {
-            return STATE.ABORT;
+            return State.ABORT;
         }
         catch ( Exception ex )
         {
@@ -103,29 +98,31 @@ class CompletionHandler extends AsyncCompletionHandler<Void> {
                 logger.debug( "", ex );
             }
         }
-        return STATE.CONTINUE;
+        return State.CONTINUE;
     }
 
     /**
      * {@inheritDoc}
      */
-    /* @Override */
-    public STATE onStatusReceived( final HttpResponseStatus status )
+    @Override
+    public State onStatusReceived( final HttpResponseStatus status )
         throws Exception
     {
+        this.builder.reset();
+        this.builder.accumulate(status);
         this.status = status;
-
-        return ( status.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND ? STATE.ABORT : STATE.CONTINUE );
+        return ( status.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND ? State.ABORT : State.CONTINUE );
     }
+
 
     /**
      * {@inheritDoc}
      */
-    /* @Override */
-    public STATE onHeadersReceived( final HttpResponseHeaders headers )
+    @Override
+    public State onHeadersReceived( final HttpHeaders headers )
         throws Exception
     {
-        this.headers = headers;
+        this.builder.accumulate(headers);
 
         if ( !TransferEvent.RequestType.PUT.equals( requestType ) )
         {
@@ -133,7 +130,7 @@ class CompletionHandler extends AsyncCompletionHandler<Void> {
             {
                 try
                 {
-                    transferResource.setContentLength( Long.parseLong( headers.getHeaders().getFirstValue( "Content-Length" ) ) );
+                    transferResource.setContentLength( Long.parseLong( headers.get( "Content-Length" ) ) );
                 }
                 catch ( RuntimeException e )
                 {
@@ -145,33 +142,18 @@ class CompletionHandler extends AsyncCompletionHandler<Void> {
                 }
                 catch ( TransferCancelledException e )
                 {
-                    return STATE.ABORT;
+                    return State.ABORT;
                 }
             }
         }
 
-        return STATE.CONTINUE;
+        return State.CONTINUE;
     }
 
     /**
      * {@inheritDoc}
      */
-    /* @Override */
-    public final Response onCompleted()
-        throws Exception
-    {
-        // The connection has timed out
-        if ( status == null )
-        {
-            throw new TransferException( "Invalid AHC State. Response will possibly gets corrupted." );
-        }
-        return null;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    /* @Override */
+    @Override
     public void onThrowable( Throwable t )
     {
         exception.set( t );
@@ -182,12 +164,12 @@ class CompletionHandler extends AsyncCompletionHandler<Void> {
      * @param response The {@link Response}
      * @return Type of the value that will be returned by the associated {@link java.util.concurrent.Future}
      */
-    @Override
-    public Void onCompleted(Response response) throws Exception {
+
+    public Response onCompleted(Response response) throws Exception {
         if (response != null && response.hasResponseStatus() && response.getStatusCode() >= HttpURLConnection.HTTP_OK
             && response.getStatusCode() <= HttpURLConnection.HTTP_CREATED)
             fireTransferSucceeded(response);
-        return null;
+        return this.builder.build();
     }
 
     void fireTransferProgressed( final byte[] buffer )

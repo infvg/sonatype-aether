@@ -10,32 +10,38 @@ package org.sonatype.aether.connector.async;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 
-import com.ning.http.client.generators.FileBodyGenerator;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.DefaultFileRegion;
+import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.stream.ChunkedNioFile;
+import org.asynchttpclient.AsyncHttpClientConfig;
+import org.asynchttpclient.netty.NettyResponseFuture;
+import org.asynchttpclient.netty.channel.ChannelManager;
+import org.asynchttpclient.netty.request.WriteProgressListener;
+import org.asynchttpclient.netty.request.body.NettyFileBody;
+import org.asynchttpclient.request.body.RandomAccessBody;
 import org.sonatype.aether.transfer.TransferCancelledException;
 
-import com.ning.http.client.RandomAccessBody;
 
-class ProgressingFileBodyGenerator
-    extends FileBodyGenerator
+class ProgressingFileBody extends NettyFileBody
 {
 
-    private final CompletionHandler completionHandler;
+    private CompletionHandler completionHandler;
 
-    public ProgressingFileBodyGenerator( File file, CompletionHandler completionHandler )
-    {
-        super( file );
-        this.completionHandler = completionHandler;
+
+    public ProgressingFileBody(File file, AsyncHttpClientConfig config, CompletionHandler handler) {
+        super(file, config);
+        this.completionHandler = handler;
+
     }
 
-    @Override
-    public RandomAccessBody createBody()
-        throws IOException
-    {
-        return new ProgressingBody( super.createBody() );
-    }
+
 
     final class ProgressingBody
         implements RandomAccessBody
@@ -50,16 +56,21 @@ class ProgressingFileBodyGenerator
             this.delegate = delegate;
         }
 
+        @Override
         public long getContentLength()
         {
             return delegate.getContentLength();
         }
 
+        @Override
+        public BodyState transferTo(ByteBuf byteBuf) throws IOException {
+            return null;
+        }
         public long read( ByteBuffer buffer )
             throws IOException
         {
             ByteBuffer event = buffer.slice();
-            long read = delegate.read( buffer );
+            long read = 2; // delegate.read( buffer );
             if ( read > 0 )
             {
                 try
@@ -75,26 +86,24 @@ class ProgressingFileBodyGenerator
             return read;
         }
 
-        public long transferTo( long position, long count, WritableByteChannel target )
-            throws IOException
-        {
-            ProgressingWritableByteChannel dst = channel;
-            if ( dst == null || dst.delegate != target )
-            {
-                channel = dst = new ProgressingWritableByteChannel( target );
-            }
-            return delegate.transferTo( position, dst );
-        }
 
+
+        @Override
         public void close()
             throws IOException
         {
             delegate.close();
         }
 
+
         @Override
-        public long transferTo(long l, WritableByteChannel writableByteChannel) throws IOException {
-            return 0;
+        public long transferTo(WritableByteChannel writableByteChannel) throws IOException {
+            ProgressingWritableByteChannel dst = channel;
+            if (true)//( dst == null || dst.delegate != target )
+            {
+                //channel = dst = new ProgressingWritableByteChannel( target );
+            }
+            return delegate.transferTo( dst);//position, dst );
         }
     }
 
@@ -141,5 +150,6 @@ class ProgressingFileBodyGenerator
         }
 
     }
+
 
 }
