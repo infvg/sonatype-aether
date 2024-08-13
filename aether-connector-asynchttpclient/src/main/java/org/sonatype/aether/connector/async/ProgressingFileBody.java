@@ -9,6 +9,7 @@ package org.sonatype.aether.connector.async;
  *******************************************************************************/
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -47,24 +48,46 @@ class ProgressingFileBody extends NettyFileBody
         implements RandomAccessBody
     {
 
-        final RandomAccessBody delegate;
 
-        private ProgressingWritableByteChannel channel;
+        private final RandomAccessFile file;
 
-        public ProgressingBody( RandomAccessBody delegate )
-        {
-            this.delegate = delegate;
+        private final FileChannel channel;
+
+
+        private BodyState state = BodyState.CONTINUE;
+
+        private final long length;
+
+        public ProgressingBody( File file ) throws FileNotFoundException {
+
+            this.file = new RandomAccessFile(file, "r");
+            channel = this.file.getChannel();
+            length = file.length();
         }
 
         @Override
         public long getContentLength()
         {
-            return delegate.getContentLength();
+            return length;
         }
 
         @Override
-        public BodyState transferTo(ByteBuf byteBuf) throws IOException {
-            return null;
+        public BodyState transferTo(ByteBuf buffer) throws IOException {
+            while (buffer.isWritable() && state != BodyState.STOP) {
+            ByteBuffer event = buffer.slice().nioBuffer();
+            long read = 2;
+            read = channel.read(event);
+            file.write(event.array(), event.arrayOffset() + event.position(), event.remaining());
+            if ( read > 0 ) {
+                    try {
+                        event.limit((int) read);
+                        completionHandler.fireTransferProgressed(event);
+                    } catch (TransferCancelledException e) {
+                        throw (IOException) new IOException(e.getMessage()).initCause(e);
+                    }
+                }
+            }
+            return BodyState.STOP;
         }
         public long read( ByteBuffer buffer )
             throws IOException
@@ -97,13 +120,13 @@ class ProgressingFileBody extends NettyFileBody
 
 
         @Override
-        public long transferTo(WritableByteChannel writableByteChannel) throws IOException {
+        public long transferTo(WritableByteChannel target) throws IOException {
             ProgressingWritableByteChannel dst = channel;
-            if (true)//( dst == null || dst.delegate != target )
+            if ( dst == null || dst.delegate != target )
             {
-                //channel = dst = new ProgressingWritableByteChannel( target );
+                channel = dst = new ProgressingWritableByteChannel( target );
             }
-            return delegate.transferTo( dst);//position, dst );
+            return delegate.transferTo( dst);
         }
     }
 
