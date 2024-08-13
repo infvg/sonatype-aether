@@ -19,17 +19,19 @@ public class ProgressingNettyFileBody extends NettyFileBody {
     private final File file;
     private final long offset;
     private final long length;
+    private final CompletionHandler handler;
     private final AsyncHttpClientConfig config;
 
-    public ProgressingNettyFileBody(File file, AsyncHttpClientConfig config) {
-        this(file, 0, file.length(), config);
+    public ProgressingNettyFileBody(File file, AsyncHttpClientConfig config, CompletionHandler handler) {
+        this(file, 0, file.length(), config, handler);
     }
 
-    public ProgressingNettyFileBody(File file, long offset, long length, AsyncHttpClientConfig config) {
+    public ProgressingNettyFileBody(File file, long offset, long length, AsyncHttpClientConfig config, CompletionHandler handler) {
         super(file, offset, length, config);
         if (!file.isFile()) {
             throw new IllegalArgumentException(String.format("File %s is not a file or doesn't exist", file.getAbsolutePath()));
         }
+        this.handler = handler;
         this.file = file;
         this.offset = offset;
         this.length = length;
@@ -44,7 +46,7 @@ public class ProgressingNettyFileBody extends NettyFileBody {
         Object body = noZeroCopy ? new ChunkedNioFile(fileChannel, offset, length, config.getChunkedFileChunkSize()) : new DefaultFileRegion(fileChannel, offset, length);
 
         channel.write(body, channel.newProgressivePromise())
-                .addListener(new WriteProgressListener(future, false, length));
+                .addListener(new ProgressingWriteProgressListener(future, false, length, handler));
         channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT, channel.voidPromise());
     }
 

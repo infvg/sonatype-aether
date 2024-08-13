@@ -178,6 +178,43 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
         fireTransferProgressed( ByteBuffer.wrap( buffer ) );
     }
 
+    void fireTransferProgressed( final long transferred, final long total )
+            throws TransferCancelledException
+    {
+        final long bytesTransferred = byteTransfered.addAndGet(transferred);
+
+        final TransferEvent transferEvent = new AsyncTransferEvent()
+        {
+
+            public EventType getType()
+            {
+                return TransferEvent.EventType.PROGRESSED;
+            }
+
+            public long getTransferredBytes()
+            {
+                return bytesTransferred;
+            }
+
+            public ByteBuffer getDataBuffer()
+            {
+                return null;
+            }
+
+            public int getDataLength()
+            {
+                return (int) (total - transferred);
+            }
+
+        };
+
+        for ( Iterator<TransferListener> iter = listeners.iterator(); iter.hasNext(); )
+        {
+            final TransferListener listener = iter.next();
+            listener.transferProgressed( transferEvent );
+        }
+    }
+
     void fireTransferProgressed( final ByteBuffer buffer )
         throws TransferCancelledException
     {
@@ -219,6 +256,32 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
         throws IOException
     {
         response.getResponseBodyAsBytes();
+        final long bytesTransferred = byteTransfered.get();
+
+        final TransferEvent transferEvent = new AsyncTransferEvent()
+        {
+
+            public EventType getType()
+            {
+                return TransferEvent.EventType.SUCCEEDED;
+            }
+
+            public long getTransferredBytes()
+            {
+                return bytesTransferred;
+            }
+
+        };
+
+        for ( Iterator<TransferListener> iter = listeners.iterator(); iter.hasNext(); )
+        {
+            final TransferListener listener = iter.next();
+            listener.transferSucceeded( transferEvent );
+        }
+    }
+    void fireTransferSucceeded()
+            throws IOException
+    {
         final long bytesTransferred = byteTransfered.get();
 
         final TransferEvent transferEvent = new AsyncTransferEvent()
