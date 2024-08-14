@@ -662,7 +662,7 @@ class AsyncRepositoryConnector
 
                             handleResponseCode( uri, response.getStatusCode(), response.getStatusText() );
 
-                            if ( !ignoreChecksum )
+                            if ( false )
                             {
                                         try {
                                             try {
