@@ -26,17 +26,15 @@ public class ProgressingFileBodyGenerator implements BodyGenerator {
     private final long regionSeek;
     private final long regionLength;
     private final CompletionHandler completionHandler;
-    private final AsyncHttpClientConfig config;
 
-    public ProgressingFileBodyGenerator(File file, AsyncHttpClientConfig config, CompletionHandler handler) {
-        this(file, 0L, file.length(), config, handler);
+    public ProgressingFileBodyGenerator(File file, CompletionHandler handler) {
+        this(file, 0L, file.length(), handler);
     }
 
-    public ProgressingFileBodyGenerator(File file, long regionSeek, long regionLength, AsyncHttpClientConfig config, CompletionHandler handler) {
+    public ProgressingFileBodyGenerator(File file, long regionSeek, long regionLength, CompletionHandler handler) {
         this.file = assertNotNull(file, "file");
         this.regionLength = regionLength;
         this.regionSeek = regionSeek;
-        this.config = config;
         this.completionHandler = handler;
 
     }
@@ -76,23 +74,30 @@ public class ProgressingFileBodyGenerator implements BodyGenerator {
         }
 
         @Override
-        public BodyState transferTo(ByteBuf buffer) throws IOException {
-            while (buffer.isWritable()) {
-                ByteBuffer event = buffer.slice().nioBuffer();
-                long read = 2;
-                read = channel.read(event);
-                file.write(event.array(), event.arrayOffset() + event.position(), event.remaining());
-                if ( read > 0 ) {
+        public BodyState transferTo(ByteBuf target) throws IOException {
+            ByteBuffer event = target.nioBuffer(target.writerIndex(), target.writableBytes());
+            int read = channel.read(event);
+            if (read > 0) {
+                target.writerIndex(target.writerIndex() + read);
+                event.flip();
+
+                if (completionHandler != null) {
                     try {
-                        event.limit((int) read);
+                        event.limit(read);
                         completionHandler.fireTransferProgressed(event);
                     } catch (TransferCancelledException e) {
-                        throw (IOException) new IOException(e.getMessage()).initCause(e);
+                        throw new RuntimeException(e);
                     }
                 }
+
+                return BodyState.CONTINUE;
+            } else if (read == -1) {
+                return BodyState.STOP;
             }
-            return BodyState.STOP;
+
+            return BodyState.CONTINUE;
         }
+
 
 
         @Override
@@ -105,17 +110,12 @@ public class ProgressingFileBodyGenerator implements BodyGenerator {
 
         @Override
         public long transferTo(WritableByteChannel target) throws IOException {
-            Object message = (ChannelManager.isSslHandlerConfigured(channel.pipeline()) || config.isDisableZeroCopy()) ? //
-                    new ChunkedNioFile(channel, regionSeek, length, config.getChunkedFileChunkSize())
-                    : new DefaultFileRegion(channel, regionSeek, length);
-
-            channel.write(message, channel.newProgressivePromise())//
-                    .addListener(new WriteProgressListener(future, false, getContentLength()));
-            channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT, channel.voidPromise());
-
+            long position = file.getFilePointer();
+            long transferred = channel.transferTo(position, length, new ProgressingWritableByteChannel(target));
+            file.seek(position + transferred);
+            return transferred;
 
     }
-
     final class ProgressingWritableByteChannel
             implements WritableByteChannel
     {

@@ -115,18 +115,19 @@ class ProgressingFileBody extends NettyFileBody
         public void close()
             throws IOException
         {
-            delegate.close();
+            //delegate.close();
         }
 
 
         @Override
         public long transferTo(WritableByteChannel target) throws IOException {
-            ProgressingWritableByteChannel dst = channel;
+            /*ProgressingWritableByteChannel dst = channel;
             if ( dst == null || dst.delegate != target )
             {
                 channel = dst = new ProgressingWritableByteChannel( target );
             }
-            return delegate.transferTo( dst);
+            return delegate.transferTo( dst);*/
+            return 2;
         }
     }
 

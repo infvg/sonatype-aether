@@ -664,11 +664,6 @@ class AsyncRepositoryConnector
 
                             if ( !ignoreChecksum )
                             {
-                                ExecutorService executorService = null;
-                                try {
-                                    executorService = Executors.newSingleThreadExecutor();
-
-                                    executorService.execute(() -> {
                                         try {
                                             try {
                                                 Map<String, Object> checksums =
@@ -714,12 +709,8 @@ class AsyncRepositoryConnector
                                                 }
                                             }
                                         }
-                                    });
-                                } catch (Exception e){
-                                    throw e;
-                                } finally {
-                                    executorService.shutdown();
-                                }
+
+
                             }
                             else
                             {
@@ -1025,25 +1016,20 @@ class AsyncRepositoryConnector
                             {
                                 Response response = super.onCompleted( r );
                                 handleResponseCode( uri, response.getStatusCode(), response.getStatusText() );
-                                ExecutorService executorService = Executors.newSingleThreadExecutor();
-                                executorService.execute( new Runnable()
-                                {
-                                    public void run()
+
+                                    try
                                     {
-                                        try
-                                        {
-                                            uploadChecksums( file, uri );
-                                        }
-                                        catch ( Exception ex )
-                                        {
-                                            exception = ex;
-                                        }
-                                        finally
-                                        {
-                                            latch.countDown();
-                                        }
+                                        uploadChecksums( file, uri );
                                     }
-                                } );
+                                    catch ( Exception ex )
+                                    {
+                                        exception = ex;
+                                    }
+                                    finally
+                                    {
+                                        latch.countDown();
+                                    }
+
 
                                 return r;
                             }
@@ -1071,7 +1057,7 @@ class AsyncRepositoryConnector
                 }
                 transferResource.setContentLength( file.length() );
 
-                FileBodyGenerator gen = new FileBodyGenerator(file);
+                ProgressingFileBodyGenerator gen = new ProgressingFileBodyGenerator(file, completionHandler);
                 Object obj = httpClient.preparePut( uri ).setHeaders( headers ).setBody(gen).execute( completionHandler );
 
                 System.out.println("iqo");
