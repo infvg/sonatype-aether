@@ -62,6 +62,7 @@ import java.net.HttpURLConnection;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -244,12 +245,12 @@ class AsyncRepositoryConnector
             ConfigUtils.getString( session, ConfigurationProperties.DEFAULT_HTTP_CREDENTIAL_ENCODING,
                                    ConfigurationProperties.HTTP_CREDENTIAL_ENCODING + "." + repository.getId(),
                                    ConfigurationProperties.HTTP_CREDENTIAL_ENCODING );
-        configBuilder.setConnectTimeout(connectTimeout);
+        configBuilder.setConnectTimeout(Duration.ofMillis(connectTimeout));
         configBuilder.setCompressionEnforced(useCompression);
         configBuilder.setFollowRedirect(true);
         configBuilder.setMaxRequestRetry(0);
-        configBuilder.setRequestTimeout(ConfigUtils.getInteger(session, ConfigurationProperties.DEFAULT_REQUEST_TIMEOUT,
-                ConfigurationProperties.REQUEST_TIMEOUT ));
+        configBuilder.setRequestTimeout(Duration.ofMillis(ConfigUtils.getInteger(session, ConfigurationProperties.DEFAULT_REQUEST_TIMEOUT,
+                ConfigurationProperties.REQUEST_TIMEOUT )));
 
         configBuilder.setProxyServer(getProxy(repository, credentialEncoding ));
         configBuilder.setRealm(getRealm( repository, credentialEncoding ));
@@ -517,6 +518,7 @@ class AsyncRepositoryConnector
                 final Request activeRequest = request;
                 final AsyncHttpClient activeHttpClient = client;
 
+                Request finalRequest = request;
                 completionHandler = new CompletionHandler( transferResource, logger, RequestType.GET )
                 {
                     private final AtomicBoolean handleTmpFile = new AtomicBoolean( true );
@@ -563,7 +565,7 @@ class AsyncRepositoryConnector
 
                                     maxRequestTry.incrementAndGet();
                                     Request newRequest =
-                                        new RequestBuilder( activeRequest ).setRangeOffset( resumableFile.length() ).build();
+                                            finalRequest.toBuilder().setRangeOffset( resumableFile.length() ).build();
                                     activeHttpClient.executeRequest( newRequest, this );
                                     resume = true;
                                     return;

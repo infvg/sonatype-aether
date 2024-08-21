@@ -19,7 +19,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 
-import static org.asynchttpclient.util.Assertions.assertNotNull;
 
 public class ProgressingFileBodyGenerator implements BodyGenerator {
     private final File file;
