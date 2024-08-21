@@ -18,11 +18,19 @@
   </parent>
 
   <artifactId>aether-connector-asynchttpclient</artifactId>
-
+  <version>1.13.1-wxd</version>
   <name>Aether :: Connector :: AsyncHttpClient</name>
   <description>
     A repository connector implementation based on AsyncHttpClient.
   </description>
+
+  <distributionManagement>
+    <repository>
+      <id>maven-repo</id>
+      <url>https://na.artifactory.swg-devops.com:443/artifactory/hyc-cpd-skywalker-team-lakehouse-on-prem-wxd-maven-local</url>
+    </repository>
+  </distributionManagement>
+
   <dependencyManagement>
     <dependencies>
       <dependency>
