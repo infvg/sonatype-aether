@@ -31,13 +31,14 @@ public class ProgressingFileBodyGenerator implements BodyGenerator {
     }
 
     public ProgressingFileBodyGenerator(File file, long regionSeek, long regionLength, CompletionHandler handler) {
-        this.file = assertNotNull(file, "file");
+        if (file == null)
+            throw new NullPointerException("file");
+        this.file = file;
         this.regionLength = regionLength;
         this.regionSeek = regionSeek;
         this.completionHandler = handler;
 
     }
-
     /**
      * {@inheritDoc}
      */
