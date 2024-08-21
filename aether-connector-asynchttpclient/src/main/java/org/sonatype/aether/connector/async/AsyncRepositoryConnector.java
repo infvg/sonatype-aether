@@ -670,8 +670,7 @@ class AsyncRepositoryConnector
                             if ( !ignoreChecksum )
                             {
                                 Runnable runnable = () -> {
-                                    try {
-                                        try {
+                                    try { try {
                                             Map<String, Object> checksums =
                                                     ChecksumUtils.calc(fileLockCompanion.getFile(),
                                                             checksumAlgos.keySet());
@@ -683,15 +682,15 @@ class AsyncRepositoryConnector
                                                         ", no checksums available from the repository");
                                             }
                                         } catch (ChecksumFailureException e) {
-                                            if (RepositoryPolicy.CHECKSUM_POLICY_FAIL.equals(checksumPolicy)) {
-                                                throw e;
-                                            }
-                                            if (listener != null) {
-                                                listener.transferCorrupted(
-                                                        newEvent(transferResource, e, RequestType.GET,
-                                                                EventType.CORRUPTED));
-                                            }
+                                        if (RepositoryPolicy.CHECKSUM_POLICY_FAIL.equals(checksumPolicy)) {
+                                            throw e;
                                         }
+                                        if (listener != null) {
+                                            listener.transferCorrupted(
+                                                    newEvent(transferResource, e, RequestType.GET,
+                                                            EventType.CORRUPTED));
+                                        }
+                                    }
                                     } catch (Exception ex) {
                                         exception = ex;
                                     } finally {
@@ -863,11 +862,12 @@ class AsyncRepositoryConnector
             throws ChecksumFailureException
         {
             File tmp = getTmpFile( file.getPath() + ext );
+
             try
             {
                 try
                 {
-                    Response response = httpClient.prepareGet( path + ext ).setRequestTimeout(100).setHeaders( headers ).execute().toCompletableFuture().get();
+                    Response response = httpClient.prepareGet( path + ext ).setHeaders(headers).execute().get();
 
                     if ( response.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND )
                     {
