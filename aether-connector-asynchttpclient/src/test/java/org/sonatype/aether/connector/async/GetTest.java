@@ -33,7 +33,22 @@ import org.sonatype.tests.http.runner.junit.ConfigurationRunner;
 public class GetTest
     extends AsyncConnectorSuiteConfiguration
 {
+    @Test
+    public void testDownloadArtifactWhoseSizeExceedsMaxHeapSize()
+            throws Exception
+    {
+        long bytes = Runtime.getRuntime().maxMemory() * 5 / 4;
+        generate.addContent( "gid/aid/version/aid-version-classifier.extension", bytes );
 
+        File f = TestFileUtils.createTempFile( "" );
+        Artifact a = artifact();
+
+        ArtifactDownload down = new ArtifactDownload( a, null, f, RepositoryPolicy.CHECKSUM_POLICY_IGNORE );
+        connector().get( Arrays.asList( down ), null );
+        connector().close();
+
+        assertEquals( bytes, f.length() );
+    }
 
     @Test
     public void testDownloadArtifact()
@@ -140,22 +155,7 @@ public class GetTest
         TestFileUtils.assertContent( "artifact", f );
     }
 
-    @Test
-    public void testDownloadArtifactWhoseSizeExceedsMaxHeapSize()
-        throws Exception
-    {
-        long bytes = Runtime.getRuntime().maxMemory() * 5 / 4;
-        generate.addContent( "gid/aid/version/aid-version-classifier.extension", bytes );
 
-        File f = TestFileUtils.createTempFile( "" );
-        Artifact a = artifact();
-
-        ArtifactDownload down = new ArtifactDownload( a, null, f, RepositoryPolicy.CHECKSUM_POLICY_IGNORE );
-        connector().get( Arrays.asList( down ), null );
-        connector().close();
-
-        assertEquals( bytes, f.length() );
-    }
 
     @Test( expected = IllegalStateException.class )
     public void testClosedGet()

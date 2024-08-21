@@ -85,7 +85,6 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
         try
         {
             fireTransferProgressed( content.getBodyPartBytes() );
-            this.builder.accumulate(content);
         }
         catch ( TransferCancelledException e )
         {

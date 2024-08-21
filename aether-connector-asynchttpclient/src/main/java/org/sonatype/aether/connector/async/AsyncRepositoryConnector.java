@@ -473,7 +473,7 @@ class AsyncRepositoryConnector
                     fileProcessor.mkdirs( fileLockCompanion.getFile().getParentFile() );
                 }
 
-                // Position the file to the end in case we are resuming an aborded download.
+                // Position the file to the end in case we are resuming an aborted download.
                 final RandomAccessFile resumableFile = fileLockCompanion.getFile() == null
                     ? null
                     : new RandomAccessFile( fileLockCompanion.getFile(), "rw" );
@@ -516,12 +516,17 @@ class AsyncRepositoryConnector
 
                 final Request activeRequest = request;
                 final AsyncHttpClient activeHttpClient = client;
+
                 completionHandler = new CompletionHandler( transferResource, logger, RequestType.GET )
                 {
                     private final AtomicBoolean handleTmpFile = new AtomicBoolean( true );
 
                     private final AtomicBoolean localException = new AtomicBoolean ( false );
 
+                    @Override
+                    public State onStatusReceived( final HttpResponseStatus status ) throws Exception {
+                        return super.onStatusReceived(status);
+                    }
                     /**
                      * {@inheritDoc}
                      */
@@ -662,55 +667,57 @@ class AsyncRepositoryConnector
 
                             handleResponseCode( uri, response.getStatusCode(), response.getStatusText() );
 
-                            if ( false )
+                            if ( !ignoreChecksum )
                             {
+                                Runnable runnable = () -> {
+                                    try {
                                         try {
-                                            try {
-                                                Map<String, Object> checksums =
-                                                        ChecksumUtils.calc(fileLockCompanion.getFile(),
-                                                                checksumAlgos.keySet());
-                                                if (!verifyChecksum(file, uri, (String) checksums.get("SHA-1"),
-                                                        ".sha1") &&
-                                                        !verifyChecksum(file, uri, (String) checksums.get("MD5"),
-                                                                ".md5")) {
-                                                    throw new ChecksumFailureException("Checksum validation failed" +
-                                                            ", no checksums available from the repository");
-                                                }
-                                            } catch (ChecksumFailureException e) {
-                                                if (RepositoryPolicy.CHECKSUM_POLICY_FAIL.equals(checksumPolicy)) {
-                                                    throw e;
-                                                }
-                                                if (listener != null) {
-                                                    listener.transferCorrupted(
-                                                            newEvent(transferResource, e, RequestType.GET,
-                                                                    EventType.CORRUPTED));
-                                                }
+                                            Map<String, Object> checksums =
+                                                    ChecksumUtils.calc(fileLockCompanion.getFile(),
+                                                            checksumAlgos.keySet());
+                                            if (!verifyChecksum(file, uri, (String) checksums.get("SHA-1"),
+                                                    ".sha1") &&
+                                                    !verifyChecksum(file, uri, (String) checksums.get("MD5"),
+                                                            ".md5")) {
+                                                throw new ChecksumFailureException("Checksum validation failed" +
+                                                        ", no checksums available from the repository");
                                             }
-                                        } catch (Exception ex) {
-                                            exception = ex;
-                                        } finally {
-                                            if (exception == null) {
-                                                try {
-                                                    rename(fileLockCompanion.getFile(), file);
-                                                    releaseLock(fileLockCompanion);
-                                                } catch (IOException e) {
-                                                    exception = e;
-                                                }
-                                            } else {
-                                                deleteFile(fileLockCompanion);
+                                        } catch (ChecksumFailureException e) {
+                                            if (RepositoryPolicy.CHECKSUM_POLICY_FAIL.equals(checksumPolicy)) {
+                                                throw e;
                                             }
-
-                                            latch.countDown();
-                                            if (closeOnComplete.get()) {
-                                                try {
-                                                    activeHttpClient.close();
-                                                } catch (IOException e) {
-                                                    throw new RuntimeException(e);
-                                                }
+                                            if (listener != null) {
+                                                listener.transferCorrupted(
+                                                        newEvent(transferResource, e, RequestType.GET,
+                                                                EventType.CORRUPTED));
                                             }
                                         }
+                                    } catch (Exception ex) {
+                                        exception = ex;
+                                    } finally {
+                                        if (exception == null) {
+                                            try {
+                                                rename(fileLockCompanion.getFile(), file);
+                                                releaseLock(fileLockCompanion);
+                                            } catch (IOException e) {
+                                                exception = e;
+                                            }
+                                        } else {
+                                            deleteFile(fileLockCompanion);
+                                        }
 
+                                        latch.countDown();
+                                        if (closeOnComplete.get()) {
+                                            try {
+                                                activeHttpClient.close();
+                                            } catch (IOException e) {
+                                                throw new RuntimeException(e);
+                                            }
+                                        }
+                                    }
+                                };
 
+                                runnable.run();
                             }
                             else
                             {
@@ -860,7 +867,7 @@ class AsyncRepositoryConnector
             {
                 try
                 {
-                    Response response = httpClient.prepareGet( path + ext ).setHeaders( headers ).execute().get();
+                    Response response = httpClient.prepareGet( path + ext ).setRequestTimeout(100).setHeaders( headers ).execute().toCompletableFuture().get();
 
                     if ( response.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND )
                     {
