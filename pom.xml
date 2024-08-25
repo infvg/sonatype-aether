@@ -95,42 +95,42 @@
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-api</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1</version>
       </dependency>
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-spi</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1</version>
       </dependency>
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-util</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1</version>
       </dependency>
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-impl</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1</version>
       </dependency>
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-connector-file</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1</version>
       </dependency>
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-connector-wagon</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1</version>
       </dependency>
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-connector-asynchttpclient</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1-wxd</version>
       </dependency>
       <dependency>
         <groupId>org.sonatype.aether</groupId>
         <artifactId>aether-test-util</artifactId>
-        <version>${project.version}</version>
+        <version>1.13.1</version>
         <scope>test</scope>
       </dependency>
 
