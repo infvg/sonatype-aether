@@ -81,7 +81,7 @@ class AsyncRepositoryConnector
 
     private final RemoteRepository repository;
 
-    private final AsyncHttpClient httpClient;
+    private final DefaultAsyncHttpClient httpClient;
 
     private final Map<String, String> checksumAlgos;
 
@@ -669,7 +669,8 @@ class AsyncRepositoryConnector
 
                             if ( !ignoreChecksum )
                             {
-                                Runnable runnable = () -> {
+
+                                httpClient.getEventLoopGroup().submit(() -> {
                                     try { try {
                                             Map<String, Object> checksums =
                                                     ChecksumUtils.calc(fileLockCompanion.getFile(),
@@ -714,9 +715,8 @@ class AsyncRepositoryConnector
                                             }
                                         }
                                     }
-                                };
+                                });
 
-                                runnable.run();
                             }
                             else
                             {
@@ -1024,18 +1024,16 @@ class AsyncRepositoryConnector
                                 Response response = super.onCompleted( r );
                                 handleResponseCode( uri, response.getStatusCode(), response.getStatusText() );
 
-                                    try
-                                    {
-                                        uploadChecksums( file, uri );
-                                    }
-                                    catch ( Exception ex )
-                                    {
+                                httpClient.getEventLoopGroup().submit(() -> {
+                                    try {
+
+                                        uploadChecksums(file, uri);
+                                    } catch (Exception ex) {
                                         exception = ex;
-                                    }
-                                    finally
-                                    {
+                                    } finally {
                                         latch.countDown();
                                     }
+                                });
 
 
                                 return r;
@@ -1064,10 +1062,8 @@ class AsyncRepositoryConnector
                 }
                 transferResource.setContentLength( file.length() );
 
-                ProgressingFileBodyGenerator gen = new ProgressingFileBodyGenerator(file, completionHandler);
-                Object obj = httpClient.preparePut( uri ).setHeaders( headers ).setBody(gen).execute( completionHandler );
-
-                System.out.println("iqo");
+                httpClient.preparePut( uri ).setHeaders( headers ).setBody(
+                    new ProgressingFileBodyGenerator( file, completionHandler ) ).execute( completionHandler );
             }
             catch ( Exception e )
             {

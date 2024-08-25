@@ -21,101 +21,69 @@ import java.nio.channels.WritableByteChannel;
 
 import static org.asynchttpclient.util.Assertions.assertNotNull;
 
-public class ProgressingFileBodyGenerator implements BodyGenerator {
-    private final File file;
-    private final long regionSeek;
-    private final long regionLength;
+
+class ProgressingFileBodyGenerator
+        extends FileBodyGenerator
+{
+
     private final CompletionHandler completionHandler;
 
-    public ProgressingFileBodyGenerator(File file, CompletionHandler handler) {
-        this(file, 0L, file.length(), handler);
+    public ProgressingFileBodyGenerator( File file, CompletionHandler completionHandler )
+    {
+        super( file );
+        this.completionHandler = completionHandler;
     }
 
-    public ProgressingFileBodyGenerator(File file, long regionSeek, long regionLength, CompletionHandler handler) {
-        this.file = assertNotNull(file, "file");
-        this.regionLength = regionLength;
-        this.regionSeek = regionSeek;
-        this.completionHandler = handler;
-
-    }
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public RandomAccessBody createBody() {
-        try {
-            return new ProgressingNettyFileBody(file, regionSeek, regionLength);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public RandomAccessBody createBody()
+    {
+        return new ProgressingBody( super.createBody() );
     }
-    public class ProgressingNettyFileBody implements RandomAccessBody {
 
-        private final RandomAccessFile file;
+    final class ProgressingBody
+            implements RandomAccessBody
+    {
 
-        private final FileChannel channel;
+        final FileBody delegate;
 
-        private final long length;
+        private ProgressingWritableByteChannel channel;
 
-        public ProgressingNettyFileBody( File file, long regionSeek, long regionLength) throws IOException {
-            this.file = new RandomAccessFile(file, "r");
-            channel = this.file.getChannel();
-            length = regionLength;
-            if (regionSeek > 0) {
-                this.file.seek(regionSeek);
-            }
+        public ProgressingBody( RandomAccessBody delegate )
+        {
+            this.delegate = (FileBody) delegate;
         }
 
-        @Override
         public long getContentLength()
         {
-            return length;
+            return delegate.getContentLength();
         }
 
         @Override
-        public BodyState transferTo(ByteBuf target) throws IOException {
-            ByteBuffer event = target.nioBuffer(target.writerIndex(), target.writableBytes());
-            int read = channel.read(event);
-            if (read > 0) {
-                target.writerIndex(target.writerIndex() + read);
-                event.flip();
+        public BodyState transferTo(ByteBuf buffer )
+                throws IOException
+        {
+            return delegate.read(buffer, completionHandler);
+        }
 
-                if (completionHandler != null) {
-                    try {
-                        event.limit(read);
-                        completionHandler.fireTransferProgressed(event);
-                    } catch (TransferCancelledException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-
-                return BodyState.CONTINUE;
-            } else if (read == -1) {
-                return BodyState.STOP;
+        public long transferTo(WritableByteChannel target )
+                throws IOException
+        {
+            ProgressingWritableByteChannel dst = channel;
+            if ( dst == null || dst.delegate != target )
+            {
+                channel = dst = new ProgressingWritableByteChannel( target );
             }
-
-            return BodyState.CONTINUE;
+            return delegate.transferTo(dst);
         }
 
-
-
-        @Override
         public void close()
                 throws IOException
         {
-            file.close();
+            delegate.close();
         }
 
-
-        @Override
-        public long transferTo(WritableByteChannel target) throws IOException {
-            long position = file.getFilePointer();
-            long transferred = channel.transferTo(position, length, new ProgressingWritableByteChannel(target));
-            file.seek(position + transferred);
-            return transferred;
-
     }
+
     final class ProgressingWritableByteChannel
             implements WritableByteChannel
     {
@@ -138,7 +106,6 @@ public class ProgressingFileBodyGenerator implements BodyGenerator {
             delegate.close();
         }
 
-        @Override
         public int write( ByteBuffer src )
                 throws IOException
         {
@@ -160,6 +127,5 @@ public class ProgressingFileBodyGenerator implements BodyGenerator {
         }
 
     }
-}
 
 }

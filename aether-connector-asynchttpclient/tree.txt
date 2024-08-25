@@ -1,0 +1,64 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------< org.sonatype.aether:aether-connector-asynchttpclient >--------
+[INFO] Building Aether :: Connector :: AsyncHttpClient 1.13.1-wxd
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- dependency:2.2:tree (default-cli) @ aether-connector-asynchttpclient ---
+[INFO] org.sonatype.aether:aether-connector-asynchttpclient:jar:1.13.1-wxd
+[INFO] +- org.sonatype.aether:aether-api:jar:1.13.1:compile
+[INFO] +- org.sonatype.aether:aether-spi:jar:1.13.1:compile
+[INFO] +- org.sonatype.aether:aether-util:jar:1.13.1:compile
+[INFO] +- org.asynchttpclient:async-http-client:jar:2.5.3:compile
+[INFO] |  +- org.asynchttpclient:async-http-client-netty-utils:jar:2.5.3:compile
+[INFO] |  |  \- io.netty:netty-buffer:jar:4.1.29.Final:compile
+[INFO] |  +- io.netty:netty-codec-http:jar:4.1.29.Final:compile
+[INFO] |  |  \- io.netty:netty-codec:jar:4.1.29.Final:compile
+[INFO] |  +- io.netty:netty-handler:jar:4.1.29.Final:compile
+[INFO] |  |  \- io.netty:netty-transport:jar:4.1.29.Final:compile
+[INFO] |  +- io.netty:netty-codec-socks:jar:4.1.29.Final:compile
+[INFO] |  +- io.netty:netty-handler-proxy:jar:4.1.29.Final:compile
+[INFO] |  +- io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.29.Final:compile
+[INFO] |  |  +- io.netty:netty-common:jar:4.1.29.Final:compile
+[INFO] |  |  \- io.netty:netty-transport-native-unix-common:jar:4.1.29.Final:compile
+[INFO] |  +- io.netty:netty-resolver-dns:jar:4.1.107.Final:compile (version managed from 4.1.29.Final)
+[INFO] |  |  +- io.netty:netty-resolver:jar:4.1.107.Final:compile
+[INFO] |  |  \- io.netty:netty-codec-dns:jar:4.1.107.Final:compile
+[INFO] |  +- org.reactivestreams:reactive-streams:jar:1.0.2:compile
+[INFO] |  +- com.typesafe.netty:netty-reactive-streams:jar:2.0.0:compile
+[INFO] |  +- org.slf4j:slf4j-api:jar:1.7.25:compile
+[INFO] |  \- com.sun.activation:javax.activation:jar:1.2.0:compile
+[INFO] +- org.codehaus.plexus:plexus-component-annotations:jar:1.5.5:provided
+[INFO] +- org.sonatype.aether:aether-test-util:jar:1.13.1:test
+[INFO] |  \- junit:junit:jar:4.8.2:test
+[INFO] +- org.sonatype.sisu:sisu-inject-plexus:jar:2.2.3:test
+[INFO] |  +- org.codehaus.plexus:plexus-classworlds:jar:2.4:test
+[INFO] |  +- org.codehaus.plexus:plexus-utils:jar:2.0.7:test
+[INFO] |  \- org.sonatype.sisu:sisu-inject-bean:jar:2.2.3:test
+[INFO] |     \- org.sonatype.sisu:sisu-guice:jar:no_aop:3.0.3:test
+[INFO] +- org.mortbay.jetty:jetty:jar:6.1.25:test
+[INFO] |  +- org.mortbay.jetty:jetty-util:jar:6.1.25:test
+[INFO] |  \- org.mortbay.jetty:servlet-api:jar:2.5-20081211:test
+[INFO] +- org.sonatype.http-testing-harness:junit-runner:jar:0.4.1:test
+[INFO] |  +- org.sonatype.http-testing-harness:hth-api:jar:0.4.1:test
+[INFO] |  \- org.sonatype.http-testing-harness:harness-runner:jar:0.4.1:test
+[INFO] \- org.sonatype.http-testing-harness:server-provider:jar:0.4.1:test
+[INFO]    +- javax.servlet:servlet-api:jar:2.5:test
+[INFO]    +- org.eclipse.jetty:jetty-servlet:jar:7.0.0.v20091005:test
+[INFO]    +- org.eclipse.jetty:jetty-security:jar:7.0.0.v20091005:test
+[INFO]    |  \- org.eclipse.jetty:jetty-server:jar:7.0.0.v20091005:test
+[INFO]    |     +- org.eclipse.jetty:jetty-continuation:jar:7.0.0.v20091005:test
+[INFO]    |     \- org.eclipse.jetty:jetty-http:jar:7.0.0.v20091005:test
+[INFO]    |        \- org.eclipse.jetty:jetty-io:jar:7.0.0.v20091005:test
+[INFO]    +- org.eclipse.jetty:jetty-webapp:jar:7.0.0.v20091005:test
+[INFO]    |  \- org.eclipse.jetty:jetty-xml:jar:7.0.0.v20091005:test
+[INFO]    |     \- org.eclipse.jetty:jetty-util:jar:7.0.0.v20091005:test
+[INFO]    \- ch.qos.logback:logback-classic:jar:0.9.26:test
+[INFO]       \- ch.qos.logback:logback-core:jar:0.9.26:test
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  1.544 s
+[INFO] Finished at: 2024-08-21T16:00:50+03:00
+[INFO] ------------------------------------------------------------------------
