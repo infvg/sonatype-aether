@@ -24,7 +24,6 @@
     A repository connector implementation based on AsyncHttpClient.
   </description>
 
-
   <dependencies>
     <dependency>
       <groupId>org.sonatype.aether</groupId>
