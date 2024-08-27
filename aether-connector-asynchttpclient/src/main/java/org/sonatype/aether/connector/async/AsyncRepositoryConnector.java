@@ -11,7 +11,9 @@ package org.sonatype.aether.connector.async;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.asynchttpclient.*;
+import org.asynchttpclient.Realm.AuthScheme;
 import org.asynchttpclient.proxy.ProxyServer;
+import org.asynchttpclient.proxy.ProxyServerSelector;
 import org.asynchttpclient.proxy.ProxyType;
 import org.asynchttpclient.request.body.generator.FileBodyGenerator;
 import org.sonatype.aether.ConfigurationProperties;
@@ -57,6 +59,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Field;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.nio.channels.FileLock;
@@ -66,6 +69,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A repository connector that uses the Async Http Client.
@@ -179,14 +184,14 @@ class AsyncRepositoryConnector
         }
     }
 
-    private Realm getRealm(Authentication a, String credentialEncoding )
+    private Realm getRealm(Authentication a, String credentialEncoding, AuthScheme scheme)
     {
         Realm.Builder realmBuilder = null;
         if ( a != null && a.getUsername() != null )
         {
 
             realmBuilder = new Realm.Builder(a.getUsername(), a.getPassword());
-            realmBuilder.setScheme(Realm.AuthScheme.BASIC); // DIGEST is not supported with the old implementation?
+            realmBuilder.setScheme(scheme);
             realmBuilder.setCharset(Charset.forName(credentialEncoding));
             realmBuilder.setUsePreemptiveAuth(false);
 
@@ -196,7 +201,7 @@ class AsyncRepositoryConnector
         return realmBuilder == null ? null : realmBuilder.build();
     }
 
-    private ProxyServer getProxy(RemoteRepository repository, String credentialEncoding)
+    private ProxyServer getProxy(RemoteRepository repository, String credentialEncoding, AuthScheme scheme)
     {
         ProxyServer proxyServer = null;
         Proxy p = repository.getProxy();
@@ -210,7 +215,7 @@ class AsyncRepositoryConnector
             proxyBuilder.setProxyType(ProxyType.HTTP);
 
             if ( a != null )
-                proxyBuilder.setRealm(getRealm(a, credentialEncoding));
+                proxyBuilder.setRealm(getRealm(a, credentialEncoding, scheme));
             if ( a != null && useSSL)
                 proxyBuilder.setSecuredPort(p.getPort());
 
@@ -238,6 +243,15 @@ class AsyncRepositoryConnector
         {
             configBuilder.setUserAgent(userAgent);
         }
+        AuthScheme scheme = AuthScheme.BASIC;
+        try (AsyncHttpClient preflightClient = Dsl.asyncHttpClient()) {
+            Response resp =preflightClient.prepareGet(repository.getUrl()).execute().get();
+
+            String string = resp.getHeader("WWW-Authenticate").split(" ")[0];
+            scheme = AuthScheme.valueOf(string.toUpperCase());
+        } catch (Exception e) {
+
+        }
         int connectTimeout =
             ConfigUtils.getInteger( session, ConfigurationProperties.DEFAULT_CONNECT_TIMEOUT,
                              ConfigurationProperties.CONNECT_TIMEOUT );
@@ -252,8 +266,8 @@ class AsyncRepositoryConnector
         configBuilder.setRequestTimeout(ConfigUtils.getInteger(session, ConfigurationProperties.DEFAULT_REQUEST_TIMEOUT,
                 ConfigurationProperties.REQUEST_TIMEOUT ));
 
-        configBuilder.setProxyServer(getProxy(repository, credentialEncoding ));
-        configBuilder.setRealm(getRealm(repository.getAuthentication(), credentialEncoding ));
+        configBuilder.setProxyServer(getProxy(repository, credentialEncoding, scheme ));
+        configBuilder.setRealm(getRealm(repository.getAuthentication(), credentialEncoding, scheme));
 
         return configBuilder.build();
     }
@@ -495,6 +509,8 @@ class AsyncRepositoryConnector
                 Request request = null;
                 final AtomicInteger maxRequestTry = new AtomicInteger();
                 AsyncHttpClient client = httpClient;
+
+
                 final AtomicBoolean closeOnComplete = new AtomicBoolean( false );
 
                 /**
@@ -565,6 +581,7 @@ class AsyncRepositoryConnector
                                     maxRequestTry.incrementAndGet();
                                     Request newRequest =
                                         new RequestBuilder( activeRequest ).setRangeOffset( resumableFile.length() ).build();
+
                                     activeHttpClient.executeRequest( newRequest, this );
                                     resume = true;
                                     return;
