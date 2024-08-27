@@ -179,10 +179,9 @@ class AsyncRepositoryConnector
         }
     }
 
-    private Realm getRealm(RemoteRepository repository, String credentialEncoding )
+    private Realm getRealm(Authentication a, String credentialEncoding )
     {
         Realm.Builder realmBuilder = null;
-        Authentication a = repository.getAuthentication();
         if ( a != null && a.getUsername() != null )
         {
 
@@ -210,12 +209,11 @@ class AsyncRepositoryConnector
                 repository.getProtocol().equalsIgnoreCase( "dav:https" );
             proxyBuilder.setProxyType(ProxyType.HTTP);
 
+            if ( a != null )
+                proxyBuilder.setRealm(getRealm(a, credentialEncoding));
             if ( a != null && useSSL)
-            {
-
                 proxyBuilder.setSecuredPort(p.getPort());
-                proxyBuilder.setRealm(getRealm(repository, credentialEncoding));
-            }
+
             proxyServer = proxyBuilder.build();
         }
 
@@ -255,7 +253,7 @@ class AsyncRepositoryConnector
                 ConfigurationProperties.REQUEST_TIMEOUT ));
 
         configBuilder.setProxyServer(getProxy(repository, credentialEncoding ));
-        configBuilder.setRealm(getRealm( repository, credentialEncoding ));
+        configBuilder.setRealm(getRealm(repository.getAuthentication(), credentialEncoding ));
 
         return configBuilder.build();
     }
