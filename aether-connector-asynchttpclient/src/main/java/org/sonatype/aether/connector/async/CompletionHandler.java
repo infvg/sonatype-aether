@@ -47,7 +47,7 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
     private final DefaultTransferResource transferResource;
 
     private final TransferEvent.RequestType requestType;
-    private final Response.ResponseBuilder builder = new Response.ResponseBuilder();
+
 
     public CompletionHandler( DefaultTransferResource transferResource, Logger logger,
                               TransferEvent.RequestType requestType )
@@ -107,8 +107,7 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
     public State onStatusReceived( final HttpResponseStatus status )
         throws Exception
     {
-        this.builder.reset();
-        this.builder.accumulate(status);
+        super.onStatusReceived(status);
         this.status = status;
         return ( status.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND ? State.ABORT : State.CONTINUE );
     }
@@ -121,7 +120,7 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
     public State onHeadersReceived( final HttpHeaders headers )
         throws Exception
     {
-        this.builder.accumulate(headers);
+        super.onHeadersReceived(headers);
 
         if ( !TransferEvent.RequestType.PUT.equals( requestType ) )
         {
@@ -168,7 +167,7 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
         if (response != null && response.hasResponseStatus() && response.getStatusCode() >= HttpURLConnection.HTTP_OK
             && response.getStatusCode() <= HttpURLConnection.HTTP_CREATED)
             fireTransferSucceeded(response);
-        return this.builder.build();
+        return response;
     }
 
     void fireTransferProgressed( final byte[] buffer )

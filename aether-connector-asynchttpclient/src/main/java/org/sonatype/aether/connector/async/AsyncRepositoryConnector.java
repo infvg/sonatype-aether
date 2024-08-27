@@ -181,17 +181,20 @@ class AsyncRepositoryConnector
 
     private Realm getRealm(RemoteRepository repository, String credentialEncoding )
     {
-        Realm realm = null;
+        Realm.Builder realmBuilder = null;
         Authentication a = repository.getAuthentication();
         if ( a != null && a.getUsername() != null )
         {
 
-            realm = new Realm.Builder(a.getUsername(), a.getPassword())
-                    .setCharset(Charset.forName(credentialEncoding)).setUsePreemptiveAuth(false).build();
+            realmBuilder = new Realm.Builder(a.getUsername(), a.getPassword());
+            realmBuilder.setScheme(Realm.AuthScheme.BASIC); // DIGEST is not supported with the old implementation?
+            realmBuilder.setCharset(Charset.forName(credentialEncoding));
+            realmBuilder.setUsePreemptiveAuth(false);
+
 
         }
 
-        return realm;
+        return realmBuilder == null ? null : realmBuilder.build();
     }
 
     private ProxyServer getProxy(RemoteRepository repository, String credentialEncoding)
