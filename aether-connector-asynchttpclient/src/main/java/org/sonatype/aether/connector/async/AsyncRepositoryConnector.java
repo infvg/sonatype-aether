@@ -13,9 +13,7 @@ import io.netty.handler.codec.http.HttpHeaders;
 import org.asynchttpclient.*;
 import org.asynchttpclient.Realm.AuthScheme;
 import org.asynchttpclient.proxy.ProxyServer;
-import org.asynchttpclient.proxy.ProxyServerSelector;
 import org.asynchttpclient.proxy.ProxyType;
-import org.asynchttpclient.request.body.generator.FileBodyGenerator;
 import org.sonatype.aether.ConfigurationProperties;
 import org.sonatype.aether.RepositorySystemSession;
 import org.sonatype.aether.repository.Authentication;
@@ -59,7 +57,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
-import java.lang.reflect.Field;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.nio.channels.FileLock;
@@ -69,8 +66,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * A repository connector that uses the Async Http Client.
@@ -244,14 +239,7 @@ class AsyncRepositoryConnector
             configBuilder.setUserAgent(userAgent);
         }
         AuthScheme scheme = AuthScheme.BASIC;
-        try (AsyncHttpClient preflightClient = Dsl.asyncHttpClient()) {
-            Response resp =preflightClient.prepareGet(repository.getUrl()).execute().get();
 
-            String string = resp.getHeader("WWW-Authenticate").split(" ")[0];
-            scheme = AuthScheme.valueOf(string.toUpperCase());
-        } catch (Exception e) {
-
-        }
         int connectTimeout =
             ConfigUtils.getInteger( session, ConfigurationProperties.DEFAULT_CONNECT_TIMEOUT,
                              ConfigurationProperties.CONNECT_TIMEOUT );
@@ -259,6 +247,11 @@ class AsyncRepositoryConnector
             ConfigUtils.getString( session, ConfigurationProperties.DEFAULT_HTTP_CREDENTIAL_ENCODING,
                                    ConfigurationProperties.HTTP_CREDENTIAL_ENCODING + "." + repository.getId(),
                                    ConfigurationProperties.HTTP_CREDENTIAL_ENCODING );
+        try (AsyncHttpClient preflightClient = Dsl.asyncHttpClient()) {
+            Response resp =preflightClient.prepareGet(repository.getUrl()).execute().get();
+            String string = resp.getHeader("WWW-Authenticate").split(" ")[0];
+            scheme = AuthScheme.valueOf(string.toUpperCase());
+        } catch (Exception ignored) {}
         configBuilder.setConnectTimeout(connectTimeout);
         configBuilder.setCompressionEnforced(useCompression);
         configBuilder.setFollowRedirect(true);
