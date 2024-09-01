@@ -533,10 +533,6 @@ class AsyncRepositoryConnector
 
                     private final AtomicBoolean localException = new AtomicBoolean ( false );
 
-                    @Override
-                    public State onStatusReceived( final HttpResponseStatus status ) throws Exception {
-                        return super.onStatusReceived(status);
-                    }
                     /**
                      * {@inheritDoc}
                      */
@@ -564,18 +560,21 @@ class AsyncRepositoryConnector
                         try
                         {
                             logger.debug("onThrowable", t);
+
+                            /**
+                             * If an IOException occurs, let's try to resume the request based on how much bytes has
+                             * been so far downloaded. Fail after IOException.
+                             */
                             try
                             {
                                 if ( !disableResumeSupport && !localException.get()
                                     && maxRequestTry.get() < maxIOExceptionRetry && isResumeWorthy( t ) )
                                 {
                                     logger.debug( "Trying to recover from an IOException " + activeRequest );
-
                                     maxRequestTry.incrementAndGet();
                                     Request newRequest =
                                         new RequestBuilder( activeRequest ).setRangeOffset( resumableFile.length() ).build();
-
-                                    activeHttpClient.executeRequest( newRequest, this );
+it g                                    activeHttpClient.executeRequest( newRequest, this );
                                     resume = true;
                                     return;
                                 }

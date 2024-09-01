@@ -176,8 +176,6 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
         fireTransferProgressed( ByteBuffer.wrap( buffer ) );
     }
 
-
-
     void fireTransferProgressed( final ByteBuffer buffer )
         throws TransferCancelledException
     {
@@ -217,33 +215,6 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
 
     void fireTransferSucceeded( final Response response )
         throws IOException
-    {
-        response.getResponseBodyAsBytes();
-        final long bytesTransferred = byteTransfered.get();
-
-        final TransferEvent transferEvent = new AsyncTransferEvent()
-        {
-
-            public EventType getType()
-            {
-                return TransferEvent.EventType.SUCCEEDED;
-            }
-
-            public long getTransferredBytes()
-            {
-                return bytesTransferred;
-            }
-
-        };
-
-        for ( Iterator<TransferListener> iter = listeners.iterator(); iter.hasNext(); )
-        {
-            final TransferListener listener = iter.next();
-            listener.transferSucceeded( transferEvent );
-        }
-    }
-    void fireTransferSucceeded()
-            throws IOException
     {
         final long bytesTransferred = byteTransfered.get();
 
