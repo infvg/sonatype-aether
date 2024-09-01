@@ -574,7 +574,7 @@ class AsyncRepositoryConnector
                                     maxRequestTry.incrementAndGet();
                                     Request newRequest =
                                         new RequestBuilder( activeRequest ).setRangeOffset( resumableFile.length() ).build();
-it g                                    activeHttpClient.executeRequest( newRequest, this );
+                                    activeHttpClient.executeRequest( newRequest, this );
                                     resume = true;
                                     return;
                                 }
