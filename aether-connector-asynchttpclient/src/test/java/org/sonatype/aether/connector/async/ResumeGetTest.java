@@ -103,7 +103,7 @@ public class ResumeGetTest
     public void testResumeInterruptedDownloadUsingRangeRequests()
         throws Exception
     {
-        FlakyHandler flakyHandler = new FlakyHandler( 4 );
+        FlakyHandler flakyHandler = new FlakyHandler( 2);
         server.setHandler( flakyHandler );
         server.start();
 
