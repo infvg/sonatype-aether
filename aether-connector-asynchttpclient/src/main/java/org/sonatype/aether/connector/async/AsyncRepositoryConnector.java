@@ -573,7 +573,9 @@ class AsyncRepositoryConnector
                                     logger.debug( "Trying to recover from an IOException " + activeRequest );
                                     maxRequestTry.incrementAndGet();
                                     Request newRequest =
-                                        new RequestBuilder( activeRequest ).setRangeOffset( resumableFile.length() ).build();
+                                        new RequestBuilder( activeRequest )
+                                                .setHeader("Range", "bytes=" + resumableFile.length() + "-")
+                                                .setRangeOffset( resumableFile.length() ).build();
                                     activeHttpClient.executeRequest( newRequest, this );
                                     resume = true;
                                     return;
