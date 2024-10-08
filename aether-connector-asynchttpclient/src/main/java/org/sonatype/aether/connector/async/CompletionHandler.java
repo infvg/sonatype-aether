@@ -112,7 +112,6 @@ class CompletionHandler extends AsyncCompletionHandler<Response> {
         return ( status.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND ? State.ABORT : State.CONTINUE );
     }
 
-
     /**
      * {@inheritDoc}
      */

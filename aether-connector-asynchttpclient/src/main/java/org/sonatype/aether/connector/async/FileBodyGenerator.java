@@ -74,25 +74,19 @@ public class FileBodyGenerator implements BodyGenerator {
         public BodyState transferTo(ByteBuf buffer) throws IOException {
             int writableBytes = buffer.writableBytes();
             ByteBuffer byteBuffer = ByteBuffer.allocate(writableBytes);
-
             int bytesRead = channel.read(byteBuffer);
-
             if (bytesRead == -1) {
                 return BodyState.STOP;
             }
-
             byteBuffer.flip();
             buffer.writeBytes(byteBuffer);
-
             return bytesRead < writableBytes ? BodyState.STOP : BodyState.CONTINUE;
         }
 
         public BodyState read(ByteBuf buffer, CompletionHandler handler) throws IOException {
             int writableBytes = buffer.writableBytes();
             ByteBuffer byteBuffer = ByteBuffer.allocate(writableBytes);
-
             int bytesRead = channel.read(byteBuffer);
-
             if (bytesRead == -1) {
                 return BodyState.STOP;
             }
@@ -111,11 +105,8 @@ public class FileBodyGenerator implements BodyGenerator {
             }
             byteBuffer.flip();
             buffer.writeBytes(byteBuffer);
-
             return bytesRead < writableBytes ? BodyState.STOP : BodyState.CONTINUE;
         }
-
-
 
         public void close() throws IOException {
             this.file.close();
@@ -126,7 +117,6 @@ public class FileBodyGenerator implements BodyGenerator {
             long position = channel.position();
             long transferred = channel.transferTo(position, length - position, writableByteChannel);
             channel.position(position + transferred);
-
             return transferred;
         }
     }

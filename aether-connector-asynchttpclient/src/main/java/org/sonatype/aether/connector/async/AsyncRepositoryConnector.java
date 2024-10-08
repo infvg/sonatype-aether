@@ -491,7 +491,6 @@ class AsyncRepositoryConnector
                 }
 
                 HttpHeaders headers = new DefaultHttpHeaders();
-
                 if ( !useCache )
                 {
                     headers.add( "Pragma", "no-cache" );
@@ -502,8 +501,6 @@ class AsyncRepositoryConnector
                 Request request = null;
                 final AtomicInteger maxRequestTry = new AtomicInteger();
                 AsyncHttpClient client = httpClient;
-
-
                 final AtomicBoolean closeOnComplete = new AtomicBoolean( false );
 
                 /**
